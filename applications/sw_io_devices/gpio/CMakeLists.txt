@@ -9,4 +9,6 @@ cmake_minimum_required(VERSION 3.20.0)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(emulated_gpio)
 
+include(${ZEPHYR_NRF_MODULE_DIR}/cmake/sdp.cmake)
+
 target_sources(app PRIVATE src/main.c)
