@@ -10,8 +10,6 @@ tests:
     sysbuild: true
     platform_allow: nrf54l15dk/nrf54l15/cpuflpr
     tags: ci_build sysbuild gpio
-    extra_args:
-      EXTRA_DTC_OVERLAY_FILE="./boards/nrf54l15dk_nrf54l15_cpuflpr_mbox.overlay"
     extra_configs:
       - CONFIG_GPIO_NRFE_EGPIO_BACKEND_MBOX=y
 
@@ -20,8 +18,6 @@ tests:
     sysbuild: true
     platform_allow: nrf54l15dk/nrf54l15/cpuflpr
     tags: ci_build sysbuild gpio
-    extra_args:
-      EXTRA_DTC_OVERLAY_FILE="./boards/nrf54l15dk_nrf54l15_cpuflpr_icmsg.overlay"
     extra_configs:
       - CONFIG_GPIO_NRFE_EGPIO_BACKEND_ICMSG=y
       - CONFIG_IPC_SERVICE=y

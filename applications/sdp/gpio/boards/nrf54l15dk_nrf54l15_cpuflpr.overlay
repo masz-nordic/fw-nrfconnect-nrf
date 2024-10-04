@@ -19,6 +19,23 @@
 			};
 		};
 	};
+
+	ipc {
+		ipc0: ipc0 {
+			compatible = "zephyr,ipc-icmsg";
+			tx-region = <&sram_tx>;
+			rx-region = <&sram_rx>;
+			mboxes = <&cpuflpr_vevif_rx 21>, <&cpuflpr_vevif_tx 20>;
+			mbox-names = "rx", "tx";
+			status = "okay";
+		};
+	};
+
+	mbox_consumer: mbox_consumer {
+		compatible = "vnd,mbox-consumer";
+		mboxes = <&cpuflpr_vevif_rx 21>, <&cpuflpr_vevif_tx 20>;
+		mbox-names = "rx", "tx";
+	};
 };
 
 &cpuflpr_vevif_rx {
