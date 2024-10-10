@@ -5,6 +5,8 @@
  */
 
 #include "./backend/backend.h"
+#include "./hrt/hrt.h"
+
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/dt-bindings/gpio/nordic-nrf-gpio.h>
@@ -93,24 +95,7 @@ static int gpio_nrfe_pin_configure(uint8_t port, uint16_t pin, uint32_t flags)
 	return 0;
 }
 
-static void gpio_nrfe_port_set_bits_raw(uint16_t set_mask)
-{
-	uint16_t outs = nrf_vpr_csr_vio_out_get();
-
-	nrf_vpr_csr_vio_out_set(outs | set_mask);
-}
-
-static void gpio_nrfe_port_clear_bits_raw(uint16_t clear_mask)
-{
-	uint16_t outs = nrf_vpr_csr_vio_out_get();
-
-	nrf_vpr_csr_vio_out_set(outs & ~clear_mask);
-}
-
-static void gpio_nrfe_port_toggle_bits(uint16_t toggle_mask)
-{
-	nrf_vpr_csr_vio_out_toggle_set(toggle_mask);
-}
+static volatile uint32_t m_pin;
 
 void process_packet(nrfe_gpio_data_packet_t *packet)
 {
@@ -124,21 +109,27 @@ void process_packet(nrfe_gpio_data_packet_t *packet)
 		break;
 	}
 	case NRFE_GPIO_PIN_CLEAR: {
-		gpio_nrfe_port_clear_bits_raw(packet->pin);
+		hrt_clear_bits_raw(packet->pin);
 		break;
 	}
 	case NRFE_GPIO_PIN_SET: {
-		gpio_nrfe_port_set_bits_raw(packet->pin);
+		hrt_set_bits_raw(packet->pin);
 		break;
 	}
 	case NRFE_GPIO_PIN_TOGGLE: {
-		gpio_nrfe_port_toggle_bits(packet->pin);
+		m_pin = packet->pin;
+		nrf_vpr_clic_int_pending_set(NRF_VPRCLIC, VPRCLIC_17_IRQn);
 		break;
 	}
 	default: {
 		break;
 	}
 	}
+}
+
+__attribute__ ((interrupt)) void hrt_handler_toggle_bits(void)
+{
+	hrt_toggle_bits(m_pin);
 }
 
 int main(void)
@@ -149,6 +140,10 @@ int main(void)
 	if (ret < 0) {
 		return 0;
 	}
+
+	IRQ_DIRECT_CONNECT(17, 2, hrt_handler_toggle_bits, 0);
+	nrf_vpr_clic_int_priority_set(NRF_VPRCLIC, VPRCLIC_17_IRQn, NRF_VPR_CLIC_INT_TO_PRIO(2));
+	nrf_vpr_clic_int_enable_set(NRF_VPRCLIC, VPRCLIC_17_IRQn, true);
 
 	if (!nrf_vpr_csr_rtperiph_enable_check()) {
 		nrf_vpr_csr_rtperiph_enable_set(true);
