@@ -7,12 +7,10 @@
 #ifndef _HRT_H__
 #define _HRT_H__
 
-#include <hal/nrf_vpr_csr_vio.h>
+void hrt_set_bits(void);
 
-void hrt_set_bits_raw(uint16_t set_mask);
+void hrt_clear_bits(void);
 
-void hrt_clear_bits_raw(uint16_t clear_mask);
-
-void hrt_toggle_bits(uint16_t toggle_mask);
+void hrt_toggle_bits(void);
 
 #endif /* _HRT_H__ */

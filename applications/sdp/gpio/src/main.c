@@ -10,10 +10,21 @@
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/dt-bindings/gpio/nordic-nrf-gpio.h>
+#include <zephyr/linker/devicetree_regions.h>
 #include <drivers/gpio/nrfe_gpio.h>
 #include <hal/nrf_vpr_csr.h>
 #include <hal/nrf_vpr_csr_vio.h>
 #include <haly/nrfy_gpio.h>
+
+#define HRT_IRQ_PRIORITY      2
+#define HRT_VEVIF_GPIO_CLEAR  17
+#define HRT_VEVIF_GPIO_SET    18
+#define HRT_VEVIF_GPIO_TOGGLE 19
+
+#define VEVIF_IRQN(vevif) VEVIF_IRQN_1(vevif)
+#define VEVIF_IRQN_1(vevif) VPRCLIC_##vevif##_IRQn
+
+volatile uint16_t irq_arg;
 
 static nrf_gpio_pin_pull_t get_pull(gpio_flags_t flags)
 {
@@ -95,8 +106,6 @@ static int gpio_nrfe_pin_configure(uint8_t port, uint16_t pin, uint32_t flags)
 	return 0;
 }
 
-static volatile uint32_t m_pin;
-
 void process_packet(nrfe_gpio_data_packet_t *packet)
 {
 	if (packet->port != 2) {
@@ -109,16 +118,18 @@ void process_packet(nrfe_gpio_data_packet_t *packet)
 		break;
 	}
 	case NRFE_GPIO_PIN_CLEAR: {
-		hrt_clear_bits_raw(packet->pin);
+		irq_arg = packet->pin;
+		nrf_vpr_clic_int_pending_set(NRF_VPRCLIC, VEVIF_IRQN(HRT_VEVIF_GPIO_CLEAR));
 		break;
 	}
 	case NRFE_GPIO_PIN_SET: {
-		hrt_set_bits_raw(packet->pin);
+		irq_arg = packet->pin;
+		nrf_vpr_clic_int_pending_set(NRF_VPRCLIC, VEVIF_IRQN(HRT_VEVIF_GPIO_SET));
 		break;
 	}
 	case NRFE_GPIO_PIN_TOGGLE: {
-		m_pin = packet->pin;
-		nrf_vpr_clic_int_pending_set(NRF_VPRCLIC, VPRCLIC_17_IRQn);
+		irq_arg = packet->pin;
+		nrf_vpr_clic_int_pending_set(NRF_VPRCLIC, VEVIF_IRQN(HRT_VEVIF_GPIO_TOGGLE));
 		break;
 	}
 	default: {
@@ -127,9 +138,24 @@ void process_packet(nrfe_gpio_data_packet_t *packet)
 	}
 }
 
+#define HRT_CONNECT(vevif, handler)                                            \
+	IRQ_DIRECT_CONNECT(vevif, HRT_IRQ_PRIORITY, handler, 0);               \
+	nrf_vpr_clic_int_enable_set(NRF_VPRCLIC, VEVIF_IRQN(vevif), true)
+
+
+__attribute__ ((interrupt)) void hrt_handler_clear_bits(void)
+{
+	hrt_clear_bits();
+}
+
+__attribute__ ((interrupt)) void hrt_handler_set_bits(void)
+{
+	hrt_set_bits();
+}
+
 __attribute__ ((interrupt)) void hrt_handler_toggle_bits(void)
 {
-	hrt_toggle_bits(m_pin);
+	hrt_toggle_bits();
 }
 
 int main(void)
@@ -141,13 +167,11 @@ int main(void)
 		return 0;
 	}
 
-	IRQ_DIRECT_CONNECT(17, 2, hrt_handler_toggle_bits, 0);
-	nrf_vpr_clic_int_priority_set(NRF_VPRCLIC, VPRCLIC_17_IRQn, NRF_VPR_CLIC_INT_TO_PRIO(2));
-	nrf_vpr_clic_int_enable_set(NRF_VPRCLIC, VPRCLIC_17_IRQn, true);
+	HRT_CONNECT(HRT_VEVIF_GPIO_CLEAR, hrt_handler_clear_bits);
+	HRT_CONNECT(HRT_VEVIF_GPIO_SET, hrt_handler_set_bits);
+	HRT_CONNECT(HRT_VEVIF_GPIO_TOGGLE, hrt_handler_toggle_bits);
 
-	if (!nrf_vpr_csr_rtperiph_enable_check()) {
-		nrf_vpr_csr_rtperiph_enable_set(true);
-	}
+	nrf_vpr_csr_rtperiph_enable_set(true);
 
 	while (true) {
 		k_cpu_idle();

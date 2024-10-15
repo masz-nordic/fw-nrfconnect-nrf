@@ -17,6 +17,13 @@
 			sram_rx: memory@2003c800 {
 				reg = <0x2003c800 0x0800>;
 			};
+
+		/*	irq_buf: memory@2003ffff0 {
+				compatible = "zephyr,memory-region";
+				reg = <0x2003fff0 0x10>;
+				zephyr,memory-region = "IrqBuf";
+				status = "okay";
+			};*/
 		};
 	};
 };

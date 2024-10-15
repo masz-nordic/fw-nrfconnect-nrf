@@ -1,20 +1,23 @@
 #include "hrt.h"
+#include <hal/nrf_vpr_csr_vio.h>
 
-void hrt_set_bits_raw(uint16_t set_mask)
+extern uint16_t irq_arg;
+
+void hrt_set_bits(void)
 {
 	uint16_t outs = nrf_vpr_csr_vio_out_get();
 
-	nrf_vpr_csr_vio_out_set(outs | set_mask);
+	nrf_vpr_csr_vio_out_set(outs | irq_arg);
 }
 
-void hrt_clear_bits_raw(uint16_t clear_mask)
+void hrt_clear_bits(void)
 {
 	uint16_t outs = nrf_vpr_csr_vio_out_get();
 
-	nrf_vpr_csr_vio_out_set(outs & ~clear_mask);
+	nrf_vpr_csr_vio_out_set(outs & ~irq_arg);
 }
 
-void hrt_toggle_bits(uint16_t toggle_mask)
+void hrt_toggle_bits(void)
 {
-	nrf_vpr_csr_vio_out_toggle_set(toggle_mask);
+	nrf_vpr_csr_vio_out_toggle_set(irq_arg);
 }
