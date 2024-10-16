@@ -143,17 +143,17 @@ void process_packet(nrfe_gpio_data_packet_t *packet)
 	nrf_vpr_clic_int_enable_set(NRF_VPRCLIC, VEVIF_IRQN(vevif), true)
 
 
-__attribute__ ((interrupt)) void hrt_handler_clear_bits(void)
+void hrt_handler_clear_bits(void)
 {
 	hrt_clear_bits();
 }
 
-__attribute__ ((interrupt)) void hrt_handler_set_bits(void)
+void hrt_handler_set_bits(void)
 {
 	hrt_set_bits();
 }
 
-__attribute__ ((interrupt)) void hrt_handler_toggle_bits(void)
+void hrt_handler_toggle_bits(void)
 {
 	hrt_toggle_bits();
 }

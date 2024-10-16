@@ -18,19 +18,19 @@
 				reg = <0x2003c800 0x0800>;
 			};
 
-		/*	irq_buf: memory@2003ffff0 {
+			irq_mret: memory@2003d1f0 {
 				compatible = "zephyr,memory-region";
-				reg = <0x2003fff0 0x10>;
-				zephyr,memory-region = "IrqBuf";
+				reg = <0x2003d1f0 0x4>;
+				zephyr,memory-region = "irq_mret";
 				status = "okay";
-			};*/
+			};
 		};
 	};
 };
 
 &cpuflpr_sram {
-	reg = <0x2003d000 DT_SIZE_K(12)>;
-	ranges = <0x0 0x2003d000 0x3000>;
+	reg = <0x2003d200 DT_SIZE_K(12)>;
+	ranges = <0x0 0x2003d200 0x2E00>;
 };
 
 &cpuflpr_vevif_rx {
