@@ -21,7 +21,6 @@ tests:
     extra_args: SB_CONFIG_SDP=y
                 SB_CONFIG_SDP_GPIO=y
                 SB_CONFIG_SDP_GPIO_BACKEND_ICMSG=y
-                SB_CONFIG_PARTITION_MANAGER=n
                 EXTRA_DTC_OVERLAY_FILE="./boards/nrf54l15dk_nrf54l15_cpuapp_egpio.overlay"
     harness: console
     harness_config:
@@ -40,7 +39,6 @@ tests:
     extra_args: SB_CONFIG_SDP=y
                 SB_CONFIG_SDP_GPIO=y
                 SB_CONFIG_SDP_GPIO_BACKEND_MBOX=y
-                SB_CONFIG_PARTITION_MANAGER=n
                 EXTRA_DTC_OVERLAY_FILE="./boards/nrf54l15dk_nrf54l15_cpuapp_egpio.overlay"
     harness: console
     harness_config:
@@ -59,7 +57,6 @@ tests:
     extra_args: SB_CONFIG_SDP=y
                 SB_CONFIG_SDP_GPIO=y
                 SB_CONFIG_SDP_GPIO_BACKEND_ICBMSG=y
-                SB_CONFIG_PARTITION_MANAGER=n
                 EXTRA_DTC_OVERLAY_FILE="./boards/nrf54l15dk_nrf54l15_cpuapp_egpio.overlay"
     harness: console
     harness_config:
