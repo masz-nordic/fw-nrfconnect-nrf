@@ -71,7 +71,7 @@ static volatile nrfe_mspi_dev_config_t nrfe_mspi_devices[DEVICES_MAX];
 
 static volatile hrt_xfer_t xfer_params;
 
-static volatile uint8_t response_buffer[CONFIG_SDP_MSPI_MAX_RESPONSE_SIZE];
+static volatile uint8_t response_buffer[300];
 
 static struct ipc_ept ep;
 static atomic_t ipc_atomic_sem = ATOMIC_INIT(0);
@@ -87,7 +87,7 @@ NRF_STATIC_INLINE void nrf_vpr_csr_vio_out_clear_set(uint16_t value)
 }
 
 static void adjust_tail(volatile hrt_xfer_data_t *xfer_data, uint16_t frame_width,
-			uint32_t data_length)
+			uint64_t data_length)
 {
 	if (data_length == 0) {
 		return;
@@ -446,7 +446,7 @@ static void ep_recv(const void *data, size_t len, void *priv)
 	}
 
 	response_buffer[0] = opcode;
-	ipc_service_send(&ep, (const void *)response_buffer, sizeof(opcode) + num_bytes);
+	ipc_service_send(&ep, (void *)response_buffer, sizeof(opcode) + num_bytes);
 }
 
 static const struct ipc_ept_cfg ep_cfg = {

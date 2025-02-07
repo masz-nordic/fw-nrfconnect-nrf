@@ -221,7 +221,7 @@ void hrt_write(hrt_xfer_t *hrt_xfer_params)
 	 */
 	if (hrt_xfer_params->cpp_mode == MSPI_CPP_MODE_0) {
 		nrf_vpr_csr_vio_shift_ctrl_buffered_set(&write_final_shift_ctrl_cfg);
-		nrf_vpr_csr_vio_out_buffered_reversed_word_set(0x00);
+		nrf_vpr_csr_vio_out_buffered_reversed_word_set(0x18F00000);
 		nrf_vpr_csr_vtim_count_mode_set(0, NRF_VPR_CSR_VTIM_COUNT_STOP);
 	} else {
 		while (nrf_vpr_csr_vio_shift_cnt_out_get() != 0) {
@@ -336,7 +336,7 @@ void hrt_read(volatile hrt_xfer_t *hrt_xfer_params)
 	hrt_tx_rx(&hrt_xfer_params->xfer_data[HRT_FE_ADDRESS], hrt_xfer_params->bus_widths.address,
 		  false, hrt_xfer_params->counter_value, CNT1_INIT_VALUE);
 
-	for (uint8_t i = 0; i < hrt_xfer_params->xfer_data[HRT_FE_DATA].word_count; i++) {
+	for (uint32_t i = 0; i < hrt_xfer_params->xfer_data[HRT_FE_DATA].word_count; i++) {
 		hrt_xfer_params->xfer_data[HRT_FE_DATA].data[i] =
 			vpr_csr_vio_in_buffered_reversed_byte_get() >> INPUT_SHIFT_COUNT;
 	}

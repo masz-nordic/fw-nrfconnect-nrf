@@ -42,8 +42,9 @@ LOG_MODULE_REGISTER(mspi_nrfe, CONFIG_MSPI_LOG_LEVEL);
 SDP_MSPI_PINCTRL_DT_DEFINE(MSPI_NRFE_NODE);
 
 static struct ipc_ept ep;
-static size_t ipc_received;
-static uint8_t *ipc_receive_buffer;
+static volatile size_t ipc_received;
+static uint8_t * volatile ipc_receive_buffer;
+uint8_t buffer[300];
 
 #if defined(CONFIG_MULTITHREADING)
 static K_SEM_DEFINE(ipc_sem, 0, 1);
@@ -450,7 +451,8 @@ static int xfer_packet(struct mspi_xfer_packet *packet, uint32_t timeout)
 {
 	int rc;
 	uint32_t len = sizeof(nrfe_mspi_xfer_packet_msg_t) + packet->num_bytes;
-	uint8_t buffer[len];
+	memset(buffer, 0, len);
+
 	nrfe_mspi_xfer_packet_msg_t *xfer_packet = (nrfe_mspi_xfer_packet_msg_t *)buffer;
 
 	xfer_packet->opcode = (packet->dir == MSPI_RX) ? NRFE_MSPI_TXRX : NRFE_MSPI_TX;
@@ -507,7 +509,6 @@ static int xfer_packet(struct mspi_xfer_packet *packet, uint32_t timeout)
 static int start_next_packet(struct mspi_xfer *xfer, uint32_t packets_done)
 {
 	struct mspi_xfer_packet *packet = (struct mspi_xfer_packet *)&xfer->packets[packets_done];
-
 	if (packet->num_bytes >= MAX_TX_MSG_SIZE) {
 		LOG_ERR("Packet size to large: %u. Increase SRAM data region.", packet->num_bytes);
 		return -EINVAL;
