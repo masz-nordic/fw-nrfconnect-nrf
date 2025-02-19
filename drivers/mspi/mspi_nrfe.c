@@ -111,6 +111,7 @@ static struct ipc_ept_cfg ep_cfg = {
 static void ep_recv(const void *data, size_t len, void *priv)
 {
 	nrfe_mspi_flpr_response_msg_t *response = (nrfe_mspi_flpr_response_msg_t *)data;
+	LOG_ERR("RECV %d", response->opcode);
 
 	switch (response->opcode) {
 	case NRFE_MSPI_CONFIG_PINS: {
