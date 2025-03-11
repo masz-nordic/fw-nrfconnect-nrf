@@ -196,7 +196,7 @@ void hrt_write(hrt_xfer_t *hrt_xfer_params)
 	 * Least significant bit is ignored when the whole OUTB is shifted to OUT at once after
 	 * switching to no shifting mode, so the read value need to be shifted left by 1.
 	 */
-	uint16_t prev_out = nrf_vpr_csr_vio_out_get() << 1;
+	uint16_t prev_out = nrf_vpr_csr_vio_out_get();
 
 	/* Transfer command */
 	hrt_tx(&hrt_xfer_params->xfer_data[HRT_FE_COMMAND], hrt_xfer_params->bus_widths.command,
@@ -220,7 +220,7 @@ void hrt_write(hrt_xfer_t *hrt_xfer_params)
 	 */
 	if (hrt_xfer_params->cpp_mode == MSPI_CPP_MODE_0) {
 		nrf_vpr_csr_vio_shift_ctrl_buffered_set(&write_final_shift_ctrl_cfg);
-		nrf_vpr_csr_vio_out_buffered_set(prev_out);
+		nrf_vpr_csr_vio_out_buffered_set(prev_out << 1);
 		nrf_vpr_csr_vtim_count_mode_set(0, NRF_VPR_CSR_VTIM_COUNT_STOP);
 	} else {
 		while (nrf_vpr_csr_vio_shift_cnt_out_get() != 0) {
@@ -369,7 +369,7 @@ void hrt_read(hrt_xfer_t *hrt_xfer_params)
 				data[i - 1] = nrf_vpr_csr_vio_in_buffered_reversed_byte_get();
 			}
 		}
-		
+
 		while (nrf_vpr_csr_vio_shift_cnt_in_get() > 0) {
 		}
 		nrf_vpr_csr_vtim_combined_counter_set(
