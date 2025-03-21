@@ -100,6 +100,7 @@ static NRF_TIMER_Type *fault_timer;
 static volatile uint32_t *cpuflpr_error_ctx_ptr =
 	(uint32_t *)DT_REG_ADDR(DT_NODELABEL(cpuflpr_error_code));
 
+#if CONFIG_SDP_MSPI_ADJUST_TAIL
 static void distribute_last_word_bits(void)
 {
 	uint32_t *rx_data = (uint32_t *)xfer_params.xfer_data[HRT_FE_DATA].data;
@@ -129,6 +130,18 @@ static void distribute_last_word_bits(void)
 	}
 }
 
+/* Handle cases where last transfer fits into one clock cycle.
+ *
+ * Due to a hardware limitation, it is is not possible to send only 1 clock pulse.
+ * Workaround is to reorganize last two transfers when last_word_length / frame_width == 1:
+ * - penultimate word is sent shorter (24 bits)
+ * - last word contains remaining byte and FRAME_WITH
+ *
+ * Workaround can be skipped if both are true:
+ * - Octal mode is not used (a byte would be one clock cycle)
+ * - Bit boundary is not used (remaining bits could be one clock cycle)
+ * Which is currently the case for this mSPI implementation.
+ */
 static void adjust_tail(volatile hrt_xfer_data_t *xfer_data, uint16_t frame_width,
 			uint32_t data_length)
 {
@@ -136,9 +149,6 @@ static void adjust_tail(volatile hrt_xfer_data_t *xfer_data, uint16_t frame_widt
 		return;
 	}
 
-	/* Due to hardware limitation, it is not possible to send only 1
-	 * clock pulse.
-	 */
 	NRFX_ASSERT(data_length / frame_width >= 1);
 	NRFX_ASSERT(data_vios_count >= frame_width);
 	NRFX_ASSERT(data_length % frame_width == 0);
@@ -148,21 +158,15 @@ static void adjust_tail(volatile hrt_xfer_data_t *xfer_data, uint16_t frame_widt
 
 	xfer_data->word_count = NRFX_CEIL_DIV(data_length, BITS_IN_WORD);
 
-	/* Due to hardware limitations it is not possible to send only 1
-	 * clock cycle. Therefore when data_length%32==FRAME_WIDTH  last
-	 * word is sent shorter (24bits) and the remaining byte and
-	 * FRAME_WIDTH number of bits are bit is sent together.
-	 */
 	if (last_word_length == 0) {
-
+		/* Last word aligned to word boundary, no need to apply workaround. */
 		last_word_length = BITS_IN_WORD;
 		if (xfer_data->data != NULL) {
 			xfer_data->last_word =
 				((uint32_t *)xfer_data->data)[xfer_data->word_count - 1];
 		}
-
 	} else if ((last_word_length / frame_width == 1) && (xfer_data->word_count > 1)) {
-
+		/* Last transfer would fit into one clock cycle, reorganize last two transfers. */
 		penultimate_word_length -= BITS_IN_BYTE;
 		last_word_length += BITS_IN_BYTE;
 
@@ -182,6 +186,7 @@ static void adjust_tail(volatile hrt_xfer_data_t *xfer_data, uint16_t frame_widt
 	xfer_data->last_word_clocks = last_word_length / frame_width;
 	xfer_data->penultimate_word_clocks = penultimate_word_length / frame_width;
 }
+#endif
 
 static void configure_clock(enum mspi_cpp_mode cpp_mode)
 {
@@ -260,16 +265,20 @@ static void xfer_execute(nrfe_mspi_xfer_packet_msg_t *xfer_packet, volatile uint
 	xfer_params.xfer_data[HRT_FE_COMMAND].data = (uint8_t *)&xfer_packet->command;
 	xfer_params.xfer_data[HRT_FE_COMMAND].word_count = 0;
 
+#if CONFIG_SDP_MSPI_ADJUST_TAIL
 	adjust_tail(&xfer_params.xfer_data[HRT_FE_COMMAND], xfer_params.bus_widths.command,
 		    nrfe_mspi_xfer_config_ptr->command_length * BITS_IN_BYTE);
+#endif
 
 	/* Configure address phase. */
 	xfer_params.xfer_data[HRT_FE_ADDRESS].fun_out = HRT_FUN_OUT_WORD;
 	xfer_params.xfer_data[HRT_FE_ADDRESS].data = (uint8_t *)&xfer_packet->address;
 	xfer_params.xfer_data[HRT_FE_ADDRESS].word_count = 0;
 
+#if CONFIG_SDP_MSPI_ADJUST_TAIL
 	adjust_tail(&xfer_params.xfer_data[HRT_FE_ADDRESS], xfer_params.bus_widths.address,
 		    nrfe_mspi_xfer_config_ptr->address_length * BITS_IN_BYTE);
+#endif
 
 	/* Configure dummy_cycles phase. */
 	xfer_params.xfer_data[HRT_FE_DUMMY_CYCLES].fun_out = HRT_FUN_OUT_WORD;
@@ -281,14 +290,16 @@ static void xfer_execute(nrfe_mspi_xfer_packet_msg_t *xfer_packet, volatile uint
 
 	/* Up to 63 clock pulses (including data from previous part) can be sent by simply
 	 * increasing shift count of last word in the previous part.
-	 * Beyond that, dummy cycles have to be treated af different transfer part.
+	 * Beyond that, dummy cycles have to be treated as different transfer part.
 	 */
 	if (xfer_params.xfer_data[elem].last_word_clocks + dummy_cycles <= MAX_SHIFT_COUNT) {
 		xfer_params.xfer_data[elem].last_word_clocks += dummy_cycles;
 	} else {
+#if CONFIG_SDP_MSPI_ADJUST_TAIL
 		adjust_tail(&xfer_params.xfer_data[HRT_FE_DUMMY_CYCLES],
 			    xfer_params.bus_widths.dummy_cycles,
 			    dummy_cycles * xfer_params.bus_widths.dummy_cycles);
+#endif
 	}
 
 	/* Configure data phase. */
@@ -297,14 +308,18 @@ static void xfer_execute(nrfe_mspi_xfer_packet_msg_t *xfer_packet, volatile uint
 	if (xfer_packet->opcode == NRFE_MSPI_TXRX) {
 		xfer_params.xfer_data[HRT_FE_DATA].data = NULL;
 
+#if CONFIG_SDP_MSPI_ADJUST_TAIL
 		adjust_tail(&xfer_params.xfer_data[HRT_FE_DATA], xfer_params.bus_widths.data,
 			    xfer_packet->num_bytes * BITS_IN_BYTE);
-
+#endif
 		xfer_params.xfer_data[HRT_FE_DATA].data = rx_buffer;
 	} else {
 		xfer_params.xfer_data[HRT_FE_DATA].data = xfer_packet->data;
+
+#if CONFIG_SDP_MSPI_ADJUST_TAIL
 		adjust_tail(&xfer_params.xfer_data[HRT_FE_DATA], xfer_params.bus_widths.data,
 			    xfer_packet->num_bytes * BITS_IN_BYTE);
+#endif
 	}
 
 	/* Hardware issue: Additional clock edge when transmitting in modes other
@@ -330,8 +345,9 @@ static void xfer_execute(nrfe_mspi_xfer_packet_msg_t *xfer_packet, volatile uint
 	if (xfer_packet->opcode == NRFE_MSPI_TXRX) {
 		nrf_vpr_clic_int_pending_set(NRF_VPRCLIC, VEVIF_IRQN(HRT_VEVIF_IDX_READ));
 
+#if CONFIG_SDP_MSPI_ADJUST_TAIL
 		distribute_last_word_bits();
-
+#endif
 	} else {
 		nrf_vpr_clic_int_pending_set(NRF_VPRCLIC, VEVIF_IRQN(HRT_VEVIF_IDX_WRITE));
 	}
@@ -571,12 +587,20 @@ static int backend_init(void)
 
 __attribute__((interrupt)) void hrt_handler_read(void)
 {
-	hrt_read(&xfer_params);
+#if defined(CONFIG_SDP_MSPI_ADJUST_TAIL)
+	hrt_read(&xfer_params, true);
+#else
+	hrt_read(&xfer_params, false);
+#endif
 }
 
 __attribute__((interrupt)) void hrt_handler_write(void)
 {
-	hrt_write(&xfer_params);
+#if defined(CONFIG_SDP_MSPI_ADJUST_TAIL)
+	hrt_write(&xfer_params, true);
+#else
+	hrt_write(&xfer_params, false);
+#endif
 }
 
 /**

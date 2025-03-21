@@ -42,7 +42,7 @@ static nrf_vpr_csr_vio_shift_ctrl_t xfer_shift_ctrl = {
 };
 
 static void hrt_tx(volatile hrt_xfer_data_t *xfer_data, uint8_t frame_width, bool *counter_running,
-		   uint16_t counter_value)
+		   uint16_t counter_value, bool adjust_tail)
 {
 	if (xfer_data->word_count == 0) {
 		return;
@@ -62,18 +62,27 @@ static void hrt_tx(volatile hrt_xfer_data_t *xfer_data, uint8_t frame_width, boo
 
 	for (uint32_t i = 0; i < xfer_data->word_count; i++) {
 
-		switch (xfer_data->word_count - i) {
-		case 1: /* Last transfer */
-			xfer_shift_ctrl.shift_count = SHIFTCNTB_VALUE(xfer_data->last_word_clocks);
-			nrf_vpr_csr_vio_shift_ctrl_buffered_set(&xfer_shift_ctrl);
+		if (adjust_tail) {
+			/* Apply workaround for single clock cycle issue. */
+			switch (xfer_data->word_count - i) {
+			case 1: /* Last transfer */
+				xfer_shift_ctrl.shift_count = SHIFTCNTB_VALUE(xfer_data->last_word_clocks);
+				nrf_vpr_csr_vio_shift_ctrl_buffered_set(&xfer_shift_ctrl);
 
-			data = xfer_data->last_word;
-			break;
-		case 2: /* Last but one transfer.*/
-			xfer_shift_ctrl.shift_count =
-				SHIFTCNTB_VALUE(xfer_data->penultimate_word_clocks);
-			nrf_vpr_csr_vio_shift_ctrl_buffered_set(&xfer_shift_ctrl);
-		default: /* Intentional fallthrough */
+				data = xfer_data->last_word;
+				break;
+			case 2: /* Last but one transfer.*/
+				xfer_shift_ctrl.shift_count =
+					SHIFTCNTB_VALUE(xfer_data->penultimate_word_clocks);
+				nrf_vpr_csr_vio_shift_ctrl_buffered_set(&xfer_shift_ctrl);
+			default: /* Intentional fallthrough */
+				if (xfer_data->data == NULL) {
+					data = 0;
+				} else {
+					data = ((uint32_t *)xfer_data->data)[i];
+				}
+			}
+		} else {
 			if (xfer_data->data == NULL) {
 				data = 0;
 			} else {
@@ -117,7 +126,7 @@ static void hrt_tx(volatile hrt_xfer_data_t *xfer_data, uint8_t frame_width, boo
 	}
 }
 
-void hrt_write(volatile hrt_xfer_t *hrt_xfer_params)
+void hrt_write(volatile hrt_xfer_t *hrt_xfer_params, bool adjust_tail)
 {
 	hrt_frame_element_t first_element = HRT_FE_DATA;
 	bool counter_running = false;
@@ -156,16 +165,20 @@ void hrt_write(volatile hrt_xfer_t *hrt_xfer_params)
 
 	nrf_vpr_csr_vio_mode_out_set(&out_mode);
 
-	switch (hrt_xfer_params->xfer_data[first_element].word_count) {
-	case 1:
-		nrf_vpr_csr_vio_shift_cnt_out_set(
-			hrt_xfer_params->xfer_data[first_element].last_word_clocks);
-		break;
-	case 2:
-		nrf_vpr_csr_vio_shift_cnt_out_set(
-			hrt_xfer_params->xfer_data[first_element].penultimate_word_clocks);
-		break;
-	default:
+	if (adjust_tail) {
+		switch (hrt_xfer_params->xfer_data[first_element].word_count) {
+		case 1:
+			nrf_vpr_csr_vio_shift_cnt_out_set(
+				hrt_xfer_params->xfer_data[first_element].last_word_clocks);
+			break;
+		case 2:
+			nrf_vpr_csr_vio_shift_cnt_out_set(
+				hrt_xfer_params->xfer_data[first_element].penultimate_word_clocks);
+			break;
+		default:
+			nrf_vpr_csr_vio_shift_cnt_out_set(BITS_IN_WORD / out_mode.frame_width);
+		}
+	} else {
 		nrf_vpr_csr_vio_shift_cnt_out_set(BITS_IN_WORD / out_mode.frame_width);
 	}
 
@@ -180,17 +193,17 @@ void hrt_write(volatile hrt_xfer_t *hrt_xfer_params)
 
 	/* Transfer command */
 	hrt_tx(&hrt_xfer_params->xfer_data[HRT_FE_COMMAND], hrt_xfer_params->bus_widths.command,
-	       &counter_running, hrt_xfer_params->counter_value);
+	       &counter_running, hrt_xfer_params->counter_value, adjust_tail);
 	/* Transfer address */
 	hrt_tx(&hrt_xfer_params->xfer_data[HRT_FE_ADDRESS], hrt_xfer_params->bus_widths.address,
-	       &counter_running, hrt_xfer_params->counter_value);
+	       &counter_running, hrt_xfer_params->counter_value, adjust_tail);
 	/* Transfer dummy cycles */
 	hrt_tx(&hrt_xfer_params->xfer_data[HRT_FE_DUMMY_CYCLES],
 	       hrt_xfer_params->bus_widths.dummy_cycles, &counter_running,
-	       hrt_xfer_params->counter_value);
+	       hrt_xfer_params->counter_value, adjust_tail);
 	/* Transfer data */
 	hrt_tx(&hrt_xfer_params->xfer_data[HRT_FE_DATA], hrt_xfer_params->bus_widths.data,
-	       &counter_running, hrt_xfer_params->counter_value);
+	       &counter_running, hrt_xfer_params->counter_value, adjust_tail);
 
 	/* Hardware issue workaround,
 	 * additional clock edge when transmitting in modes other than MSPI_CPP_MODE_0.
@@ -235,7 +248,7 @@ void hrt_write(volatile hrt_xfer_t *hrt_xfer_params)
 	}
 }
 
-void hrt_read(volatile hrt_xfer_t *hrt_xfer_params)
+void hrt_read(volatile hrt_xfer_t *hrt_xfer_params, bool adjust_tail)
 {
 	nrf_vpr_csr_vio_shift_ctrl_t rx_shift_ctrl = {
 		.shift_count = SHIFTCNTB_VALUE(BITS_IN_WORD / hrt_xfer_params->bus_widths.data),
@@ -248,12 +261,11 @@ void hrt_read(volatile hrt_xfer_t *hrt_xfer_params)
 		.frame_width = hrt_xfer_params->bus_widths.data,
 	};
 	uint32_t data_length = hrt_xfer_params->xfer_data[HRT_FE_DATA].word_count;
-	bool hold = hrt_xfer_params->ce_hold;
 	uint32_t *data = (uint32_t *)hrt_xfer_params->xfer_data[HRT_FE_DATA].data;
-	uint32_t last_word;
 	uint16_t prev_out;
 	uint16_t cnt0;
 	uint16_t cnt0_prev;
+	bool hold = hrt_xfer_params->ce_hold;
 
 	/* Enable CE */
 	if (hrt_xfer_params->ce_polarity == MSPI_CE_ACTIVE_LOW) {
@@ -268,7 +280,7 @@ void hrt_read(volatile hrt_xfer_t *hrt_xfer_params)
 	/* Write only command address and dummy cycles and keep CS active. */
 	hrt_xfer_params->xfer_data[HRT_FE_DATA].word_count = 0;
 	hrt_xfer_params->ce_hold = true;
-	hrt_write(hrt_xfer_params);
+	hrt_write(hrt_xfer_params, adjust_tail);
 
 	/* Restore variables values for read phase. */
 	hrt_xfer_params->xfer_data[HRT_FE_DATA].word_count = data_length;
@@ -315,7 +327,7 @@ void hrt_read(volatile hrt_xfer_t *hrt_xfer_params)
 	nrf_vpr_csr_vio_out_buffered_reversed_word_set(0x00);
 
 	/* Special case when only 2 clocks are required. */
-	if ((hrt_xfer_params->xfer_data[HRT_FE_DATA].word_count == 1) &&
+	if (adjust_tail && (hrt_xfer_params->xfer_data[HRT_FE_DATA].word_count == 1) &&
 	    (hrt_xfer_params->xfer_data[HRT_FE_DATA].last_word_clocks == 2)) {
 
 		/* Start reception. */
@@ -352,7 +364,7 @@ void hrt_read(volatile hrt_xfer_t *hrt_xfer_params)
 		nrf_vpr_csr_vio_mode_out_set(&rx_out_mode);
 
 		if (hrt_xfer_params->bus_widths.data == 8) {
-			last_word = nrf_vpr_csr_vio_in_buffered_reversed_byte_get();
+			uint32_t last_word = nrf_vpr_csr_vio_in_buffered_reversed_byte_get();
 			hrt_xfer_params->xfer_data[HRT_FE_DATA].data[0] =
 				(uint8_t)(last_word >> BYTE_2_SHIFT);
 			hrt_xfer_params->xfer_data[HRT_FE_DATA].data[1] =
@@ -363,49 +375,54 @@ void hrt_read(volatile hrt_xfer_t *hrt_xfer_params)
 					  BYTE_3_SHIFT);
 		}
 	} else {
+		/* Value of 1 is set to SHIFTCNTOUT register to start MSPI clock
+		 * running, 0 is not possible. Due to hardware error it causes 2*1
+		 * clock pulses to be generated. After that n-2 pulses have to be
+		 * generated to receive total of n bits
+		 */
+		rx_shift_ctrl.shift_count -= 2;
+		nrf_vpr_csr_vio_shift_ctrl_buffered_set(&rx_shift_ctrl);
+
+		nrf_vpr_csr_vtim_combined_counter_set(
+			(hrt_xfer_params->counter_value
+			 << VPRCSR_NORDIC_CNT_CNT0_Pos) +
+			(CNT1_INIT_VALUE << VPRCSR_NORDIC_CNT_CNT1_Pos));
+		/* Read INBRB to continue clock beyond first 2 pulses. */
+		nrf_vpr_csr_vio_in_buffered_reversed_byte_get();
+
 		uint32_t i = 0;
 
-		for (; i < hrt_xfer_params->xfer_data[HRT_FE_DATA].word_count; i++) {
+		if (adjust_tail) {
+			for (; i < hrt_xfer_params->xfer_data[HRT_FE_DATA].word_count; i++) {
+				switch (hrt_xfer_params->xfer_data[HRT_FE_DATA].word_count - i) {
+				case 1: /* Last transfer */
+					rx_shift_ctrl.shift_count = SHIFTCNTB_VALUE(
+						hrt_xfer_params->xfer_data[HRT_FE_DATA].last_word_clocks);
+					break;
+				case 2: /* Last but one transfer */
+					rx_shift_ctrl.shift_count =
+						SHIFTCNTB_VALUE(hrt_xfer_params->xfer_data[HRT_FE_DATA]
+									.penultimate_word_clocks);
+					break;
+				default:
+					rx_shift_ctrl.shift_count = SHIFTCNTB_VALUE(
+						BITS_IN_WORD / hrt_xfer_params->bus_widths.data);
+				}
 
-			switch (hrt_xfer_params->xfer_data[HRT_FE_DATA].word_count - i) {
-			case 1: /* Last transfer */
-				rx_shift_ctrl.shift_count = SHIFTCNTB_VALUE(
-					hrt_xfer_params->xfer_data[HRT_FE_DATA].last_word_clocks);
-				break;
-			case 2: /* Last but one transfer */
-				rx_shift_ctrl.shift_count =
-					SHIFTCNTB_VALUE(hrt_xfer_params->xfer_data[HRT_FE_DATA]
-								.penultimate_word_clocks);
-				break;
-			default:
-				rx_shift_ctrl.shift_count = SHIFTCNTB_VALUE(
-					BITS_IN_WORD / hrt_xfer_params->bus_widths.data);
+				nrf_vpr_csr_vio_shift_ctrl_buffered_set(&rx_shift_ctrl);
+				data[i - 1] = nrf_vpr_csr_vio_in_buffered_reversed_byte_get();
 			}
+		} else {
+			for (; i < hrt_xfer_params->xfer_data[HRT_FE_DATA].word_count + 1; i++) {
+				rx_shift_ctrl.shift_count =
+					SHIFTCNTB_VALUE(BITS_IN_WORD / hrt_xfer_params->bus_widths.data);
 
-			if (i == 0) {
-				/* Value of 1 is set to SHIFTCNTOUT register to start MSPI clock
-				 * running, 0 is not possible. Due to hardware error it causes 2*1
-				 * clock pulses to be generated. After that n-2 pulses have to be
-				 * generated to receive total of n bits
-				 */
-				rx_shift_ctrl.shift_count -= 2;
 				nrf_vpr_csr_vio_shift_ctrl_buffered_set(&rx_shift_ctrl);
-
-				nrf_vpr_csr_vtim_combined_counter_set(
-					(hrt_xfer_params->counter_value
-					 << VPRCSR_NORDIC_CNT_CNT0_Pos) +
-					(CNT1_INIT_VALUE << VPRCSR_NORDIC_CNT_CNT1_Pos));
-				/* Read INBRB to continue clock beyond first 2 pulses. */
-				nrf_vpr_csr_vio_in_buffered_reversed_byte_get();
-
-			} else {
-				nrf_vpr_csr_vio_shift_ctrl_buffered_set(&rx_shift_ctrl);
-
 				data[i - 1] = nrf_vpr_csr_vio_in_buffered_reversed_byte_get();
 			}
 		}
 
-		/* Wait for reception to end, transfer has to be stopped "manualy".
+		/* Wait for reception to end, transfer has to be stopped manually.
 		 * Setting SHIFTCTRLB cannot be used because with RTPERIPHCTRL:STOPCOUNTERS == 1,
 		 * counter stops 1 clock too early.
 		 */
@@ -433,10 +450,13 @@ void hrt_read(volatile hrt_xfer_t *hrt_xfer_params)
 		rx_out_mode.mode = NRF_VPR_CSR_VIO_SHIFT_NONE;
 		nrf_vpr_csr_vio_mode_out_set(&rx_out_mode);
 
-		hrt_xfer_params->xfer_data[HRT_FE_DATA].last_word =
-			nrf_vpr_csr_vio_in_buffered_reversed_byte_get() >>
-			(BITS_IN_WORD - hrt_xfer_params->xfer_data[HRT_FE_DATA].last_word_clocks *
-						hrt_xfer_params->bus_widths.data);
+		if (adjust_tail) {
+			uint32_t last_word_bits = hrt_xfer_params->xfer_data[HRT_FE_DATA].last_word_clocks *
+							hrt_xfer_params->bus_widths.data;
+			hrt_xfer_params->xfer_data[HRT_FE_DATA].last_word =
+				nrf_vpr_csr_vio_in_buffered_reversed_byte_get() >>
+				(BITS_IN_WORD - last_word_bits);
+		}
 	}
 
 	/* Stop counters */

@@ -21,6 +21,7 @@
 #define BITS_IN_WORD 32
 #define BITS_IN_BYTE 8
 
+/** @brief Frame element. */
 typedef enum {
 	HRT_FE_COMMAND,
 	HRT_FE_ADDRESS,
@@ -29,6 +30,7 @@ typedef enum {
 	HRT_FE_MAX
 } hrt_frame_element_t;
 
+/** @brief Function to be used for writing to buffered out register. */
 typedef enum {
 	HRT_FUN_OUT_BYTE,
 	HRT_FUN_OUT_WORD,
@@ -51,6 +53,9 @@ typedef struct {
 	 */
 	uint32_t word_count;
 
+	/** @brief Function for writing to buffered out register. */
+	hrt_fun_out_t fun_out;
+
 	/** @brief Amount of clock pulses for last word.
 	 *         Due to hardware limitation, in case when last word clock pulse count is 1,
 	 *         the penultimate word has to share its bits with last word,
@@ -62,21 +67,24 @@ typedef struct {
 	 *                 penultimate_word_clocks = 32-BITS_IN_BYTE
 	 *                 last_word_clocks = (buffer_length%32)/QUAD + BITS_IN_BYTE
 	 *                 last_word = penultimate_word>>24 | last_word<<8
+	 *
+	 * @note   Used only if adjust_tail is enabled.
 	 */
 	uint8_t last_word_clocks;
 
-	/** @brief  Amount of clock pulses for penultimate word.
-	 *          For more info see last_word_clocks.
+	/** @brief Amount of clock pulses for penultimate word.
+	 *         For more info see last_word_clocks.
+	 *
+	 * @note   Used only if adjust_tail is enabled.
 	 */
 	uint8_t penultimate_word_clocks;
 
 	/** @brief Value of last word.
 	 *         For more info see last_word_clocks.
+	 *
+	 * @note   Used only if adjust_tail is enabled.
 	 */
 	uint32_t last_word;
-
-	/** @brief Function for writing to buffered out register. */
-	hrt_fun_out_t fun_out;
 } hrt_xfer_data_t;
 
 /** @brief Hrt transfer parameters. */
@@ -121,16 +129,18 @@ typedef struct {
  *
  *  Function to be used to write data on MSPI.
  *
- *  @param[in] hrt_xfer_params Hrt transfer parameters and data.
+ *  @param[in] hrt_xfer_params HRT transfer parameters and data.
+ *  @param[in] adjust_tail     True if workaround for single clock issue is to be applied.
  */
-void hrt_write(volatile hrt_xfer_t *hrt_xfer_params);
+void hrt_write(volatile hrt_xfer_t *hrt_xfer_params, bool adjust_tail);
 
 /** @brief Read.
  *
  *  Function to be used to read data from MSPI.
  *
- *  @param[in] hrt_xfer_params Hrt transfer parameters and data.
+ *  @param[in] hrt_xfer_params HRT transfer parameters and data.
+ *  @param[in] adjust_tail     True if workaround for single clock issue is to be applied.
  */
-void hrt_read(volatile hrt_xfer_t *hrt_xfer_params);
+void hrt_read(volatile hrt_xfer_t *hrt_xfer_params, bool adjust_tail);
 
 #endif /* _HRT_H__ */

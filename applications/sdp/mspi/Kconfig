@@ -18,4 +18,12 @@ config SDP_MSPI_FAULT_TIMER
 	  Timer is used to detect application faults. If the timer expires,
 	  the application is considered to be in a fault state.
 
+config SDP_MSPI_ADJUST_TAIL
+	bool "Enable tail adjustment"
+	help
+	  Apply workarounds for HW issue when last transfer is only 1 clock cycle long.
+	  This is necessary when:
+	  - Using Octal SPI
+	  - Sending transactions on bit boundary
+
 source "Kconfig.zephyr"
