@@ -24,15 +24,15 @@
 				| SPI_MODE_CPOL)
 #endif
 
-#define MSPI_BUS_NODE    DT_NODELABEL(sdp_mspi)
+#define MSPI_BUS_NODE    DT_NODELABEL(sdp_mspi_ctrl)
 #define SPIS_OP	 (SPI_OP_MODE_SLAVE | SPI_MODE)
 
 // static const struct device *mspi_devices[] = {
 // 	DT_FOREACH_CHILD_STATUS_OKAY_SEP(MSPI_BUS_NODE, DEVICE_DT_GET, (,))
 // };
 
-#define TEST_AREA_DEV_NODE0	DT_ALIAS(testdevice0) // DT_INST(0, jedec_mspi_nor)
-#define TEST_AREA_DEV_NODE1	DT_ALIAS(testdevice1) // DT_INST(0, zephyr_mspi_emul_device)
+#define TEST_AREA_DEV_NODE0	DT_NODELABEL(dut_spi_dt) // DT_INST(0, jedec_mspi_nor)
+#define TEST_AREA_DEV_NODE1	DT_NODELABEL(test_flash) // DT_INST(0, zephyr_mspi_emul_device)
 
 #if !DT_NODE_EXISTS(TEST_AREA_DEV_NODE0)
 #error "TEST_AREA_DEV_NODE0 does not exist"

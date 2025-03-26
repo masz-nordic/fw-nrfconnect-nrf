@@ -46,25 +46,32 @@
 
 };
 
-// /delete-node/ &mx25r64;
-
-&sdp_mspi {
+&cpuflpr_vpr {
 	status = "okay";
-	pinctrl-0 = <&sdp_mspi_spi_default>;
-	pinctrl-1 = <&sdp_mspi_spi_sleep>;
 
-	// mspi_device: mspi_device@0 {
-	// 	status = "okay";
-	// 	compatible = "zephyr,mspi-emul-device";
-	// 	reg = <0x0>;
-	// 	mspi-max-frequency = <48000000>;
-	// };
-
-	dut_spi_dt: dut_spi_dt@1 {
+	sdp_mspi_ctrl: sdp_mspi_ctrl {
+		compatible = "nordic,nrfe-mspi-controller";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		clock-frequency = <DT_FREQ_M(64)>;
+		pinctrl-0 = <&sdp_mspi_spi_default>;
+		pinctrl-1 = <&sdp_mspi_spi_sleep>;
+		pinctrl-names = "default", "sleep";
 		status = "okay";
-		compatible = "zephyr,mspi-emul-device";
-		reg = <0x1>;
-		mspi-max-frequency = <DT_FREQ_M(16)>;
+
+		dut_spi_dt: dut_spi_dt@0 {
+			compatible = "zephyr,mspi-emul-device";
+			status = "okay";
+			reg = <0>;
+			mspi-max-frequency = <DT_FREQ_M(16)>;
+		};
+
+		test_flash: test_flash@2 {
+			compatible = "zephyr,mspi-emul-device";
+			status = "okay";
+			reg = <0x2>;
+			mspi-max-frequency = <DT_FREQ_M(16)>;
+		};
 	};
 };
 
@@ -81,8 +88,8 @@ dut_spis: &spi21 {
 
 / {
 	aliases {
-		mspi0 = &sdp_mspi;
-		testdevice0 = &mx25r64;
-		testdevice1 = &dut_spi_dt;
+		mspi0 = &sdp_mspi_ctrl;
+		testdevice0 = &dut_spi_dt;
+		testdevice1 = &test_flash;
 	};
 };
